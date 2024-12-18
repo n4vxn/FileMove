@@ -1,16 +1,17 @@
 package utils
 
 import (
-	"github.com/n4vxn/FileMove/types"
 	"fmt"
+
+	"github.com/n4vxn/FileMove/types"
 )
 
 func ValidateUploadMetadata(metaData types.UploadMetadata) bool {
-	if metaData.Action == "" || metaData.FileSize == 0 || metaData.Name == "" || metaData.Checksum == "" {
+	if metaData.Username == "" || metaData.Action == "" || metaData.FileSize == 0 || metaData.Name == "" || metaData.Checksum == "" {
 		fmt.Println("validation error: invalid metadata")
 		return false
 	}
-	fmt.Printf("%s|%s|%d|%s", metaData.Action, metaData.Name, metaData.FileSize, metaData.Checksum)
+	fmt.Printf("%s|%s|%s|%d|%s", metaData.Username, metaData.Action, metaData.Name, metaData.FileSize, metaData.Checksum)
 	return true
 }
 

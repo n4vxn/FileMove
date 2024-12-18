@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/n4vxn/FileMove/cmd"
 	"github.com/n4vxn/FileMove/db"
 )
 
@@ -38,9 +37,9 @@ func main() {
 
 		switch action {
 		case "Sign Up":
-			cmd.SignUpCmd.Run(nil, nil)
+			SignUpCmd.Run(nil, nil)
 		case "Login":
-			err := cmd.LoginCmd.RunE(nil, nil)
+			err := LoginCmd.RunE(nil, nil)
 			if err != nil {
 				fmt.Println("Login failed, try again.")
 			} else {
@@ -55,12 +54,8 @@ func main() {
 	}
 }
 
-func Login() {
-	cmd.LoginCmd.Run(nil, nil)
-}
-
 func StartServer() {
-	serv := cmd.NewServer(cmd.Config{}) // Initialize the server
+	serv := NewServer(Config{}) // Initialize the server
 
 	cert, err := tls.LoadX509KeyPair(certfile, keyfile)
 	if err != nil {
@@ -83,6 +78,6 @@ func StartServer() {
 
 	time.Sleep(2 * time.Second)
 
-	client := cmd.NewClientConn(HOST, PORT)
+	client := NewClientConn(ctx, HOST, PORT)
 	client.ReadInput()
 }

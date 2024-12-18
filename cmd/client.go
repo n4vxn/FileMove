@@ -1,7 +1,7 @@
-package cmd
+package main
 
 import (
-	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -10,15 +10,16 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
+
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/n4vxn/FileMove/utils"
 )
 
 type Client struct {
-	conn *tls.Conn
+	ContextualConn
 }
 
-func NewClientConn(host, port string) *Client {
+func NewClientConn(ctx context.Context, host, port string) *Client {
 	certPool := x509.NewCertPool()
 	serverCert, err := os.ReadFile("./tls/server.crt")
 	if err != nil {
@@ -36,81 +37,86 @@ func NewClientConn(host, port string) *Client {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &Client{conn: conn}
-}
 
-func (c *Client) ReadInput() {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("Enter command: ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("error reading input:", err)
-			continue
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-		parts := strings.Fields(input)
-		if len(parts) != 2 {
-			fmt.Println("Invalid input. Example: upload <filename>")
-			continue
-		}
-
-		action := parts[0]
-		filename := parts[1]
-
-		switch action {
-		case "UPLOAD":
-			go c.UploadToServer(action, filename)
-		case "DOWNLOAD":
-			go c.DownloadFromServer(action, filename)
-		default:
-			fmt.Println("Unknown action:", action)
-		}
-		time.Sleep(3 * time.Second)
+	return &Client{
+		ContextualConn: ContextualConn{
+			Conn:     conn,
+			ctx:      ctx,
+			Username: currentUser,
+		},
 	}
 }
 
-func (c *Client) UploadToServer(action, filename string) {
+func (c *Client) ReadInput() {
+	for {
+		var action string
+		prompt := &survey.Select{
+			Message: "What would you like to do?",
+			Options: []string{"Upload", "Download", "Exit"},
+			Default: "Upload",
+		}
+
+		err := survey.AskOne(prompt, &action)
+		if err != nil {
+			log.Fatalf("Failed to get input: %v", err)
+		}
+
+		switch action {
+		case "Upload":
+			var filename string
+			survey.AskOne(&survey.Input{Message: "Enter the filename to upload:"}, &filename)
+			go c.UploadToServer(c.Username, action, filename)
+		case "Download":
+			var filename string
+			survey.AskOne(&survey.Input{Message: "Choose the file to download:"}, &filename)
+			go c.DownloadFromServer(c.Username, action, filename)
+		default:
+			return
+		}
+	}
+}
+
+func (c *Client) UploadToServer(username, action, filename string) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		log.Println("File does not exist.")
+		return
+	}
+	
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(file.Name())
 	defer file.Close()
 
 	checksum, err := utils.GenerateChecksum(file)
 	if err != nil {
 		log.Fatal("error generating checksum:", err)
 	}
-	metadata := utils.GenerateUploadMetadata(action, file, checksum)
-	_, err = c.conn.Write([]byte(metadata))
+	metadata := utils.GenerateUploadMetadata(username, action, file, checksum)
+	_, err = c.Conn.Write([]byte(metadata))
 	if err != nil {
 		log.Fatal("error sending metadata:", err)
 	}
 
 	file.Seek(0, io.SeekStart)
 
-	_, err = io.Copy(c.conn, file)
+	_, err = io.Copy(c.Conn, file)
 	if err != nil {
 		fmt.Println("cannot send data to the server")
 	}
 	log.Println("Data sent succesfully")
 }
 
-func (c *Client) DownloadFromServer(action, filename string) {
-	outMetadata := utils.GenerateDownloadMetadata(action, filename)
-	_, err := c.conn.Write([]byte(outMetadata))
+func (c *Client) DownloadFromServer(username, action, filename string) {
+	outMetadata := utils.GenerateDownloadMetadata(username, action, filename)
+	_, err := c.Conn.Write([]byte(outMetadata))
 	if err != nil {
 		log.Fatal("Error sending metadata:", err)
 	}
 
 	metaDataBuffer := make([]byte, 4096)
 
-	n, err := c.conn.Read(metaDataBuffer)
+	n, err := c.Conn.Read(metaDataBuffer)
 	if err != nil {
 		log.Printf("Error reading metadata: %v", err)
 		return
@@ -149,7 +155,7 @@ func (c *Client) DownloadFromServer(action, filename string) {
 	}
 	defer file.Close()
 
-	_, err = io.CopyN(file, c.conn, int64(metadata.FileSize))
+	_, err = io.CopyN(file, c.Conn, int64(metadata.FileSize))
 	if err != nil {
 		fmt.Println("Error downloading data from server:", err)
 		return

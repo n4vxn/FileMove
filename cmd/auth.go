@@ -1,10 +1,8 @@
-package cmd
+package main
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"net"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/n4vxn/FileMove/db"
@@ -13,17 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type contextKey = string
-
-const userContextKey contextKey = "username"
-
-type UserConn struct {
-	Conn net.Conn
-	Username string
-	Ctx context.Context
-}
-
-var activeConns = make(map[string]*UserConn)
+var currentUser string
 
 var SignUpCmd = &cobra.Command{
 	Use:   "signup",
@@ -66,6 +54,8 @@ var LoginCmd = &cobra.Command{
 		}
 
 		log.Printf("Login successful! Welcome, %s.\n", username)
+		currentUser = username
+
 		return nil
 	},
 }
@@ -73,5 +63,6 @@ var LoginCmd = &cobra.Command{
 func init() {
 	// Add the 'signup' and 'login' commands to the root command
 	rootCmd.AddCommand(SignUpCmd)
+	rootCmd.AddCommand(LoginCmd)
 
 }

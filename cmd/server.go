@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"context"
@@ -8,15 +8,12 @@ import (
 	"log"
 	"net"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/n4vxn/FileMove/utils"
 )
 
 const (
-	HOST    = "localhost"
-	PORT    = "8080"
 	TYPE    = "tcp"
 	maxConn = 10
 )
@@ -26,17 +23,32 @@ type Config struct {
 	PORT string
 }
 
+type ContextualConn struct {
+	net.Conn
+	ctx      context.Context
+	Username string
+}
+
+func (c *ContextualConn) Context() context.Context {
+	return c.ctx
+}
+
 type Server struct {
 	listener net.Listener
 	Config
+	ContextualConn
+	ctx context.Context
 }
 
 func NewServer(cfg Config) *Server {
 	if len(cfg.PORT) == 0 {
 		cfg.PORT = PORT
 	}
+
+	ctx := context.Background()
 	return &Server{
 		Config: cfg,
+		ctx:    ctx,
 	}
 }
 
@@ -62,22 +74,36 @@ func (s *Server) StartAcceptLoop() {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			fmt.Println("failed to accept connection:", err)
+			continue
 		}
+
+		if currentUser == "" {
+			log.Println("Username not found!")
+		} else {
+			log.Printf("Server started with username: %s\n", currentUser)
+		}
+
+		contextualConn := ContextualConn{
+			Conn:     conn,
+			ctx:      s.ctx,
+			Username: currentUser,
+		}
+
 		sem <- struct{}{} // Bloc if max connections reached
 		go func(conn net.Conn) {
 			defer func() { <-sem }() // Release semaphore slots
-			s.handleRequests(conn)
-		}(conn)
+			s.handleRequests(&contextualConn)
+		}(contextualConn)
 	}
 }
 
-func (s *Server) handleRequests(conn net.Conn) {
+func (s *Server) handleRequests(conn *ContextualConn) {
 	defer conn.Close()
 	metaDataBuffer := make([]byte, 2048)
 
-	fmt.Println("Received a request:", conn.RemoteAddr().String())
-	// Receive metadata
+	log.Printf("%s connected!\n", conn.Username)
 
+	// Receive metadata
 	n, err := conn.Read(metaDataBuffer)
 	if err != nil {
 		log.Printf("Error reading metadata: %v", err)
@@ -88,21 +114,20 @@ func (s *Server) handleRequests(conn net.Conn) {
 	metaDataBuffer = nil
 
 	parts := strings.Split(strings.TrimSpace(metadata), "|")
-
-	if parts[0] == "UPLOAD" {
-		if len(parts) != 4 {
+	if parts[1] == "Upload" {
+		if len(parts) != 5 {
 			conn.Write([]byte("Invalid file upload metadata format"))
 			return
 		} else {
 			s.handleUpload(metadata, conn)
 		}
 
-	} else if parts[0] == "DOWNLOAD" {
+	} else if parts[1] == "DOWNLOAD" {
 		if len(parts) != 2 {
 			conn.Write([]byte("Invalid file download metadata format"))
 			return
 		} else {
-			s.handleDownload(metadata, parts[0], conn)
+			s.handleDownload(s.Username, metadata, parts[0], conn)
 		}
 	}
 }
@@ -122,10 +147,9 @@ func (s *Server) handleUpload(metadata string, conn net.Conn) {
 		return
 	}
 
-	ext := path.Ext(metaData.Name)
-	folderName := strings.TrimSuffix(metaData.Name, ext)
+	folderName := metaData.Username
 
-	err = os.Mkdir(folderName, 0775)
+	err = os.MkdirAll(folderName, 0775)
 	if err != nil {
 		fmt.Println("error creating directory:", err)
 	}
@@ -155,7 +179,7 @@ func (s *Server) handleUpload(metadata string, conn net.Conn) {
 	}
 }
 
-func (s *Server) handleDownload(filename, action string, conn net.Conn) {
+func (s *Server) handleDownload(username, filename, action string, conn net.Conn) {
 	metaData, err := utils.ParseDownloadMetadata(filename)
 	if err != nil {
 		logErrorAndRespond(conn, err, "Error parsing metadata")
@@ -175,6 +199,15 @@ func (s *Server) handleDownload(filename, action string, conn net.Conn) {
 		return
 	}
 
+	folderContent, err := os.ReadDir("navee")
+	if err != nil {
+		log.Println("No dir")
+	}
+
+	for _, v := range folderContent {
+		log.Println(v.Info())
+	}
+
 	file, err := os.Open(metaData.Name)
 	if err != nil {
 		logErrorAndRespond(conn, err, "Error loading the requested file")
@@ -188,7 +221,7 @@ func (s *Server) handleDownload(filename, action string, conn net.Conn) {
 		return
 	}
 
-	metadata := utils.GenerateUploadMetadata(action, file, checksum)
+	metadata := utils.GenerateUploadMetadata(username, action, file, checksum)
 	_, err = conn.Write([]byte(metadata))
 	if err != nil {
 		logErrorAndRespond(conn, err, "Error sending metadata")
