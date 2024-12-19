@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func GenerateUploadMetadata(username, action string, file *os.File, checksum string) string {
+func GenerateUploadMetadata(username string, action string, file *os.File, checksum string) string {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		log.Fatal(err)

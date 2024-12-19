@@ -17,7 +17,7 @@ func ParseUploadMetadata(data string) (*types.UploadMetadata, error) {
 
 	size, err := strconv.Atoi(parts[3])
 	if err != nil {
-		return nil, fmt.Errorf("error parsing file size: %v", err)
+		return nil, fmt.Errorf("parsing error")
 	}
 
 	return &types.UploadMetadata{
@@ -33,7 +33,7 @@ func ParseDownloadMetadata(data string) (*types.DownloadMetadata, error) {
 	parts := strings.Split(data, "|")
 
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid metadata format")
+		return nil, fmt.Errorf("parsing error")
 	}
 
 	return &types.DownloadMetadata{

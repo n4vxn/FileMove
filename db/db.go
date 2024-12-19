@@ -36,7 +36,7 @@ func ConnectDB() error {
 		return err
 	}
 
-	fmt.Println("Successfully connected to PostgreSQL!")
+	fmt.Println("Connected to DB")
 	return nil
 }
 

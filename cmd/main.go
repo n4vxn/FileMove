@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -16,6 +17,7 @@ var (
 	PORT     = "8080"
 	certfile = "./tls/server.crt"
 	keyfile  = "./tls/server.key"
+	RootDir = "FileMove-Storage"
 )
 
 func main() {
@@ -80,4 +82,11 @@ func StartServer() {
 
 	client := NewClientConn(ctx, HOST, PORT)
 	client.ReadInput()
+}
+
+func CreateDir() {
+	if err := os.MkdirAll(RootDir, 0775); err != nil {
+		log.Println("Failed to create directory:", err)
+		return
+	}
 }

@@ -79,17 +79,16 @@ func (s *Server) StartAcceptLoop() {
 
 		if currentUser == "" {
 			log.Println("Username not found!")
-		} else {
-			log.Printf("Server started with username: %s\n", currentUser)
 		}
 
+		username := currentUser
 		contextualConn := ContextualConn{
 			Conn:     conn,
 			ctx:      s.ctx,
-			Username: currentUser,
+			Username: username,
 		}
 
-		sem <- struct{}{} // Bloc if max connections reached
+		sem <- struct{}{} // Block if max connections reached
 		go func(conn net.Conn) {
 			defer func() { <-sem }() // Release semaphore slots
 			s.handleRequests(&contextualConn)
@@ -101,12 +100,13 @@ func (s *Server) handleRequests(conn *ContextualConn) {
 	defer conn.Close()
 	metaDataBuffer := make([]byte, 2048)
 
-	log.Printf("%s connected!\n", conn.Username)
+	username := conn.Username
+	log.Printf("%s connected!\n", username)
 
 	// Receive metadata
 	n, err := conn.Read(metaDataBuffer)
 	if err != nil {
-		log.Printf("Error reading metadata: %v", err)
+		fmt.Printf("Error reading metadata: %v", err)
 		return
 	}
 
@@ -122,12 +122,12 @@ func (s *Server) handleRequests(conn *ContextualConn) {
 			s.handleUpload(metadata, conn)
 		}
 
-	} else if parts[1] == "DOWNLOAD" {
-		if len(parts) != 2 {
+	} else if parts[1] == "Download" {
+		if len(parts) != 3 {
 			conn.Write([]byte("Invalid file download metadata format"))
 			return
 		} else {
-			s.handleDownload(s.Username, metadata, parts[0], conn)
+			s.handleDownload(username, metadata, parts[1], conn)
 		}
 	}
 }
@@ -141,7 +141,6 @@ func (s *Server) handleUpload(metadata string, conn net.Conn) {
 
 	// Validation
 	if utils.ValidateUploadMetadata(*metaData) {
-		log.Println("Metadata received and valid")
 	} else {
 		log.Println("Invalid metadata")
 		return
@@ -179,8 +178,8 @@ func (s *Server) handleUpload(metadata string, conn net.Conn) {
 	}
 }
 
-func (s *Server) handleDownload(username, filename, action string, conn net.Conn) {
-	metaData, err := utils.ParseDownloadMetadata(filename)
+func (s *Server) handleDownload(username, metadata, action string, conn net.Conn) {
+	metaData, err := utils.ParseDownloadMetadata(metadata)
 	if err != nil {
 		logErrorAndRespond(conn, err, "Error parsing metadata")
 		return
@@ -195,17 +194,7 @@ func (s *Server) handleDownload(username, filename, action string, conn net.Conn
 	// Check if file exists
 	if _, err := os.Stat(metaData.Name); os.IsNotExist(err) {
 		log.Printf("File not found: %s", metaData.Name)
-		conn.Write([]byte("File not found"))
 		return
-	}
-
-	folderContent, err := os.ReadDir("navee")
-	if err != nil {
-		log.Println("No dir")
-	}
-
-	for _, v := range folderContent {
-		log.Println(v.Info())
 	}
 
 	file, err := os.Open(metaData.Name)
@@ -214,6 +203,7 @@ func (s *Server) handleDownload(username, filename, action string, conn net.Conn
 		return
 	}
 	defer file.Close()
+	
 
 	checksum, err := utils.GenerateChecksum(file)
 	if err != nil {
@@ -221,7 +211,7 @@ func (s *Server) handleDownload(username, filename, action string, conn net.Conn
 		return
 	}
 
-	metadata := utils.GenerateUploadMetadata(username, action, file, checksum)
+	metadata = utils.GenerateUploadMetadata(username, action, file, checksum)
 	_, err = conn.Write([]byte(metadata))
 	if err != nil {
 		logErrorAndRespond(conn, err, "Error sending metadata")
@@ -229,7 +219,7 @@ func (s *Server) handleDownload(username, filename, action string, conn net.Conn
 	}
 
 	file.Seek(0, io.SeekStart)
-	// s.transferData(file,  conn, "send")
+	s.transferData(file, 0, conn, "send")
 }
 
 func (s *Server) transferData(file *os.File, size int64, conn net.Conn, operation string) {

@@ -27,15 +27,10 @@ func NewClientConn(ctx context.Context, host, port string) *Client {
 	}
 	certPool.AppendCertsFromPEM(serverCert)
 
-	// Configure TLS
-	tlsConfig := &tls.Config{
-		RootCAs: certPool,
-	}
-
-	// Establish the TLS connection
+	tlsConfig := &tls.Config{RootCAs: certPool}
 	conn, err := tls.Dial(TYPE, host+":"+port, tlsConfig)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to establish TLS connection:", err)
 	}
 
 	return &Client{
@@ -51,115 +46,96 @@ func (c *Client) ReadInput() {
 	for {
 		var action string
 		prompt := &survey.Select{
-			Message: "What would you like to do?",
+			Message: "Choose an action:",
 			Options: []string{"Upload", "Download", "Exit"},
-			Default: "Upload",
+		}
+		if err := survey.AskOne(prompt, &action); err != nil {
+			log.Println("Error reading input:", err)
+			continue
 		}
 
-		err := survey.AskOne(prompt, &action)
-		if err != nil {
-			log.Fatalf("Failed to get input: %v", err)
-		}
-
+		var filename string
 		switch action {
 		case "Upload":
-			var filename string
 			survey.AskOne(&survey.Input{Message: "Enter the filename to upload:"}, &filename)
-			go c.UploadToServer(c.Username, action, filename)
+			c.UploadToServer(filename)
 		case "Download":
-			var filename string
-			survey.AskOne(&survey.Input{Message: "Choose the file to download:"}, &filename)
-			go c.DownloadFromServer(c.Username, action, filename)
-		default:
+			survey.AskOne(&survey.Input{Message: "Enter the filename to download:"}, &filename)
+			c.DownloadFromServer(filename)
+		case "Exit":
+			fmt.Println("Exiting the program...")
 			return
+		default:
+			fmt.Println("Invalid option. Please try again.")
 		}
 	}
 }
 
-func (c *Client) UploadToServer(username, action, filename string) {
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		log.Println("File does not exist.")
-		return
-	}
-	
+func (c *Client) UploadToServer(filename string) {
 	file, err := os.Open(filename)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("File not found:", err)
+		return
 	}
 	defer file.Close()
 
 	checksum, err := utils.GenerateChecksum(file)
 	if err != nil {
-		log.Fatal("error generating checksum:", err)
+		log.Println("Checksum generation failed:", err)
+		return
 	}
-	metadata := utils.GenerateUploadMetadata(username, action, file, checksum)
-	_, err = c.Conn.Write([]byte(metadata))
-	if err != nil {
-		log.Fatal("error sending metadata:", err)
+
+	metadata := utils.GenerateUploadMetadata(c.Username, "Upload", file, checksum)
+	if _, err := c.Conn.Write([]byte(metadata)); err != nil {
+		log.Println("Failed to send metadata:", err)
+		return
 	}
 
 	file.Seek(0, io.SeekStart)
-
-	_, err = io.Copy(c.Conn, file)
-	if err != nil {
-		fmt.Println("cannot send data to the server")
+	if _, err := io.Copy(c.Conn, file); err != nil {
+		log.Println("Failed to upload file:", err)
+		return
 	}
-	log.Println("Data sent succesfully")
+	log.Println("File uploaded successfully")
 }
 
-func (c *Client) DownloadFromServer(username, action, filename string) {
-	outMetadata := utils.GenerateDownloadMetadata(username, action, filename)
-	_, err := c.Conn.Write([]byte(outMetadata))
-	if err != nil {
-		log.Fatal("Error sending metadata:", err)
+func (c *Client) DownloadFromServer(filename string) {
+	metadata := utils.GenerateDownloadMetadata(c.Username, "Download", filename)
+	if _, err := c.Conn.Write([]byte(metadata)); err != nil {
+		log.Println("Failed to send download request:", err)
+		return
 	}
 
 	metaDataBuffer := make([]byte, 4096)
-
 	n, err := c.Conn.Read(metaDataBuffer)
 	if err != nil {
-		log.Printf("Error reading metadata: %v", err)
+		log.Println("Failed to receive metadata:", err)
 		return
 	}
 
-	incMetadata := string(metaDataBuffer[:n])
-	metadata, err := utils.ParseUploadMetadata(incMetadata)
+	uploadMetadata, err := utils.ParseUploadMetadata(string(metaDataBuffer[:n]))
+	if err != nil || !utils.ValidateUploadMetadata(*uploadMetadata) {
+		log.Println("Invalid metadata received")
+		return
+	}
+
+	dirName := "down-" + strings.TrimSuffix(uploadMetadata.Name, path.Ext(uploadMetadata.Name))
+	if err := os.MkdirAll(dirName, 0775); err != nil {
+		log.Println("Failed to create directory:", err)
+		return
+	}
+
+	filePath := path.Join(dirName, uploadMetadata.Name)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("Error parsing metadata: %v", err)
-		return
-	}
-
-	log.Println(metadata)
-
-	if utils.ValidateUploadMetadata(*metadata) {
-	} else {
-		log.Println("Invalid metadata")
-		return
-	}
-
-	ext := path.Ext(metadata.Name)
-	folderName := strings.TrimSuffix(metadata.Name, ext)
-
-	if _, err := os.Stat("down-" + folderName); os.IsNotExist(err) {
-		err = os.Mkdir("down-"+folderName, 0775)
-		if err != nil {
-			fmt.Println("Error creating directory:", err)
-			return
-		}
-	}
-
-	file, err := os.Create("./down-" + folderName + "/" + metadata.Name)
-	if err != nil {
-		fmt.Println("Error creating file:", err)
+		log.Println("Failed to create file:", err)
 		return
 	}
 	defer file.Close()
 
-	_, err = io.CopyN(file, c.Conn, int64(metadata.FileSize))
-	if err != nil {
-		fmt.Println("Error downloading data from server:", err)
+	if _, err := io.CopyN(file, c.Conn, int64(uploadMetadata.FileSize)); err != nil {
+		log.Println("Failed to download file:", err)
 		return
 	}
-
-	log.Println("Data downloaded successfully")
+	log.Println("File downloaded successfully:", filePath)
 }

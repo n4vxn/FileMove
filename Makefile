@@ -3,10 +3,10 @@ include .env
 MIGRATIONS_PATH = ./migration
 
 build:
-	@go build -o bin/tcp-fs
+	@go build -o bin/tcp-fs ./cmd
 
 run: build
-	@./bin/tcp-fs
+	@./bin/tcp-fs ./cmd
 
 .PHONY: migration
 migration:
