@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/n4vxn/FileMove/db"
 	"github.com/n4vxn/FileMove/utils"
 )
 
@@ -145,15 +146,18 @@ func (s *Server) handleUpload(metadata string, conn net.Conn) {
 		log.Println("Invalid metadata")
 		return
 	}
+	db.SaveUploadMetadata(metaData)
 
 	folderName := metaData.Username
+	dirPath := fmt.Sprintf("./%s/%s", ServerStorage, folderName)
 
-	err = os.MkdirAll(folderName, 0775)
+	err = os.MkdirAll(dirPath, 0775)
 	if err != nil {
 		fmt.Println("error creating directory:", err)
 	}
 
-	file, err := os.Create("./" + folderName + "/" + metaData.Name)
+	filePath := fmt.Sprintf("%s/%s", dirPath, metaData.Name)
+	file, err := os.Create(filePath)
 	if err != nil {
 		fmt.Println("error creating file:", err)
 	}
@@ -203,7 +207,6 @@ func (s *Server) handleDownload(username, metadata, action string, conn net.Conn
 		return
 	}
 	defer file.Close()
-	
 
 	checksum, err := utils.GenerateChecksum(file)
 	if err != nil {
@@ -217,6 +220,8 @@ func (s *Server) handleDownload(username, metadata, action string, conn net.Conn
 		logErrorAndRespond(conn, err, "Error sending metadata")
 		return
 	}
+
+	db.SaveDownloadMetadata(metaData)
 
 	file.Seek(0, io.SeekStart)
 	s.transferData(file, 0, conn, "send")

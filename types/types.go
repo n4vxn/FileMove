@@ -12,6 +12,8 @@ type DownloadMetadata struct {
 	Username string `json:"username"`
 	Action   string `json:"action"`
 	Name     string `json:"name"`
+	FileSize int64  `json:"file_size"`
+	Checksum string `json:"checksum"`
 }
 
 type User struct {

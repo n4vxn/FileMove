@@ -41,15 +41,25 @@ func ConnectDB() error {
 }
 
 func SaveUploadMetadata(metadata *types.UploadMetadata) error {
-	query := `INSERT INTO files (filename, file_size, checksum, action) 
-			  VALUES ($1, $2, $3, $4) RETURNING id`
+	query := `INSERT INTO upload_metadata (filename, file_size, checksum, action, uploaded_at) 
+			  VALUES ($1, $2, $3, $4, NOW()) RETURNING id`
 	var id int
-	err := db.QueryRow(query, &metadata.Name, &metadata.FileSize, &metadata.Checksum, &metadata.Action).Scan(&id)
+	err := db.QueryRow(query, metadata.Name, metadata.FileSize, metadata.Checksum, metadata.Action).Scan(&id)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("File metadata saved with ID: %d\n", id)
-	return err
+	return nil
+}
+
+func SaveDownloadMetadata(metadata *types.DownloadMetadata) error {
+	query := `INSERT INTO download_metadata (filename, file_size, checksum, action, uploaded_at) 
+			  VALUES ($1, $2, $3, $4, NOW()) RETURNING id`
+	var id int
+	err := db.QueryRow(query, metadata.Name, metadata.FileSize, metadata.Checksum, metadata.Action).Scan(&id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func SaveUsers(user *types.User) error {

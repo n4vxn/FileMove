@@ -17,7 +17,7 @@ var (
 	PORT     = "8080"
 	certfile = "./tls/server.crt"
 	keyfile  = "./tls/server.key"
-	RootDir = "FileMove-Storage"
+	ServerStorage = "Server-Storage"
 )
 
 func main() {
@@ -77,7 +77,8 @@ func StartServer() {
 			log.Fatalf("Server failed to start: %v", err)
 		}
 	}()
-
+	
+	CreateDir()
 	time.Sleep(2 * time.Second)
 
 	client := NewClientConn(ctx, HOST, PORT)
@@ -85,7 +86,7 @@ func StartServer() {
 }
 
 func CreateDir() {
-	if err := os.MkdirAll(RootDir, 0775); err != nil {
+	if err := os.MkdirAll(ServerStorage, 0775); err != nil {
 		log.Println("Failed to create directory:", err)
 		return
 	}
