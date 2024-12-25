@@ -1,9 +1,40 @@
 # FileMove - TCP File Server
 
-FileMove is a simple TCP file server that allows users to upload, download, and store files securely. The server uses PostgreSQL to store user data and file metadata, ensuring smooth file transfers.
+FileMove is a Go-based secure file transfer system designed to handle file uploads and downloads with features like TLS encryption, checksum validation, and PostgreSQL integration.
+
 ## Features
 
-- **Upload Files**: Allows users to upload files to the server.
-- **Download Files**: Users can download files from the server.
-- **Store Metadata**: File metadata (e.g., filenames) and user information are stored in a PostgreSQL database.
-- **Simple TCP Connection**: Uses TCP for file transfer, secured with TLS.
+- Secure communication using **TLS**.
+- **File upload** and **download** functionality.
+- Metadata handling for file transfers.
+- **Checksum validation** to ensure data integrity.
+- PostgreSQL integration for saving metadata.
+- Docker setup for easy deployment.
+- **Database migrations** using `go-migration`.
+
+## Prerequisites
+
+- Go 1.18 or higher
+- Docker and Docker Compose
+- PostgreSQL database
+- TLS certificates (server and client)
+
+## Project Structure
+
+FileMove/
+├── main.go               # Main application entry point
+├── server.go             # Server implementation
+├── client.go             # Client implementation
+├── utils/                
+│   ├── checksum.go       # Checksum generation and validation
+│   └── metadata.go       # Metadata generation and parsing
+├── db/                   
+│   ├── database.go       # Database operations
+│   └── migrations/       # Folder for migration files
+├── tls/                  
+│   ├── server.crt        # Server certificate
+│   └── server.key        # Server private key
+├── Dockerfile            # Dockerfile for the application
+├── docker-compose.yml    # Docker Compose configuration
+├── README.md             # Project documentation
+└── go.mod                # Go module file
