@@ -21,6 +21,7 @@ FileMove is a Go-based secure file transfer system designed to handle file uploa
 
 ## Project Structure
 
+```plaintext
 FileMove/
 ├── main.go               # Main application entry point
 ├── server.go             # Server implementation
